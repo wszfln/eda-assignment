@@ -32,11 +32,7 @@ export class EDAAppStack extends cdk.Stack {
       displayName: "New Image topic",
     }); 
 
-    const mailerQ = new sqs.Queue(this, "mailer-queue", {
-      receiveMessageWaitTime: cdk.Duration.seconds(10),
-    });
-
-    newImageTopic.addSubscription(new subs.SqsSubscription(mailerQ));
+  
 
   // Lambda functions
 
@@ -72,14 +68,13 @@ export class EDAAppStack extends cdk.Stack {
     maxBatchingWindow: cdk.Duration.seconds(10),
   });
 
-  const newImageMailEventSource = new events.SqsEventSource(mailerQ, {
-    batchSize: 5,
-    maxBatchingWindow: cdk.Duration.seconds(10),
-  }); 
+  
 
   processImageFn.addEventSource(newImageEventSource);
 
-  mailerFn.addEventSource(newImageMailEventSource);
+  // a direct subscriber to the topic
+  newImageTopic.addSubscription(new subs.LambdaSubscription(mailerFn))
+
 
   // Permissions
 
