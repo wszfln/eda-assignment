@@ -44,13 +44,10 @@ export class EDAAppStack extends cdk.Stack {
       tableName: "Images",                                                     
     })
 
-    const newImageTopic = new sns.Topic(this, "NewImageTopic", {
-      displayName: "New Image topic",
+    const imageEventTopic = new sns.Topic(this, "ImageEventTopic", {
+      displayName: "Image Event topic",
     });
     
-    const updateImageTopic = new sns.Topic(this, "UpdateImageTopic", {
-      displayName: "Update Image topic"
-    })
 
 
   
@@ -120,15 +117,15 @@ export class EDAAppStack extends cdk.Stack {
  // S3 --> SQS
  imagesBucket.addEventNotification(
   s3.EventType.OBJECT_CREATED,
-  new s3n.SnsDestination(newImageTopic)  // Changed
+  new s3n.SnsDestination(imageEventTopic)  // Changed
 );
 
 imagesBucket.addEventNotification(
   s3.EventType.OBJECT_REMOVED,
-  new s3n.SnsDestination(updateImageTopic)
+  new s3n.SnsDestination(imageEventTopic)
 )
 
-  newImageTopic.addSubscription(new subs.SqsSubscription(imageProcessQueue));
+ 
 
  // SQS --> Lambda
   const newImageEventSource = new events.SqsEventSource(imageProcessQueue, {
@@ -149,10 +146,39 @@ imagesBucket.addEventNotification(
 
 
   // a direct subscriber to the topic
-  newImageTopic.addSubscription(new subs.LambdaSubscription(mailerFn))
-  updateImageTopic.addSubscription(new subs.LambdaSubscription(deleteImageFn))
+  imageEventTopic.addSubscription(
+    new subs.SqsSubscription(imageProcessQueue, {
+      filterPolicyWithMessageBody: {
+        Records: sns.FilterOrPolicy.policy({                                                          
+          eventName: sns.FilterOrPolicy.filter(sns.SubscriptionFilter.stringFilter({                  
+            matchPrefixes: ['ObjectCreated']
+          }))
+        })
+      }
+    })
+  );
 
-  updateImageTopic.addSubscription(new subs.LambdaSubscription(updateTableFn, {
+  imageEventTopic.addSubscription(new subs.LambdaSubscription(mailerFn, {         
+    filterPolicyWithMessageBody: {
+      Records: sns.FilterOrPolicy.policy({
+        eventName: sns.FilterOrPolicy.filter(sns.SubscriptionFilter.stringFilter({
+          matchPrefixes: ['ObjectCreated']
+        }))
+      })
+    }
+  }))    
+
+  imageEventTopic.addSubscription(new subs.LambdaSubscription(deleteImageFn, {
+    filterPolicyWithMessageBody: {
+      Records: sns.FilterOrPolicy.policy({
+        eventName: sns.FilterOrPolicy.filter(sns.SubscriptionFilter.stringFilter({
+          matchPrefixes: ['ObjectRemoved']
+        }))
+      })
+    }
+  }))
+
+  imageEventTopic.addSubscription(new subs.LambdaSubscription(updateTableFn, {
     filterPolicy: {
       comment_type: sns.SubscriptionFilter.stringFilter({
         allowlist: ['Caption']
@@ -200,7 +226,7 @@ imagesBucket.addEventNotification(
     });
 
     new cdk.CfnOutput(this, "topicARN", {
-      value: updateImageTopic.topicArn,
+      value: imageEventTopic.topicArn,
     });
   }
 }

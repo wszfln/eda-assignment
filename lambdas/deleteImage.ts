@@ -12,13 +12,8 @@ export const handler: SNSHandler = async (event: any) => {
 
     if (snsMessage.Records) {
       console.log("message body ", JSON.stringify(snsMessage));
-      for (const messageRecord of snsMessage.Records) {
-
-        const eventType: string = messageRecord.eventName
-        console.log("event type ", eventType)
-        if (eventType.includes('ObjectRemoved')) {                                
-          console.log("delete event recieved")                                    
-          const s3e = messageRecord.s3;                                          
+      for (const messageRecord of snsMessage.Records) {                                 
+        const s3e = messageRecord.s3;                                            
 
           const srcKey = decodeURIComponent(s3e.object.key.replace(/\+/g, " "));
           console.log('srcKey ', JSON.stringify(srcKey))
@@ -34,9 +29,6 @@ export const handler: SNSHandler = async (event: any) => {
             })
           )
           console.log("DynamoDB response: ", commandOutput)
-        }else{
-          console.log("non-delete event recieved, ignoring...")
-        } 
     }
     }
 }
