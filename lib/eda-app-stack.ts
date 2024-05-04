@@ -48,8 +48,8 @@ export class EDAAppStack extends cdk.Stack {
       displayName: "New Image topic",
     });
     
-    const deleteImageTopic = new sns.Topic(this, "DeleteImageTopic", {
-      displayName: "Delete Image topic"
+    const updateImageTopic = new sns.Topic(this, "UpdateImageTopic", {
+      displayName: "Update Image topic"
     })
 
 
@@ -87,6 +87,21 @@ export class EDAAppStack extends cdk.Stack {
     }
   );
 
+  const updateTableFn = new lambdanode.NodejsFunction(
+    this,
+    "UpdateTableFn",
+    {
+      runtime: lambda.Runtime.NODEJS_18_X,
+      entry: `${__dirname}/../lambdas/updateTable.ts`,
+      timeout: cdk.Duration.seconds(15),
+      memorySize: 128,
+      environment: {
+        TABLE_NAME: imagesTable.tableName,
+        REGION: 'eu-west-1',
+      },
+    }
+  );
+
 
   const mailerFn = new lambdanode.NodejsFunction(this, "mailer-function", {
     runtime: lambda.Runtime.NODEJS_16_X,
@@ -110,7 +125,7 @@ export class EDAAppStack extends cdk.Stack {
 
 imagesBucket.addEventNotification(
   s3.EventType.OBJECT_REMOVED,
-  new s3n.SnsDestination(deleteImageTopic)
+  new s3n.SnsDestination(updateImageTopic)
 )
 
   newImageTopic.addSubscription(new subs.SqsSubscription(imageProcessQueue));
@@ -135,7 +150,15 @@ imagesBucket.addEventNotification(
 
   // a direct subscriber to the topic
   newImageTopic.addSubscription(new subs.LambdaSubscription(mailerFn))
-  deleteImageTopic.addSubscription(new subs.LambdaSubscription(deleteImageFn))
+  updateImageTopic.addSubscription(new subs.LambdaSubscription(deleteImageFn))
+
+  updateImageTopic.addSubscription(new subs.LambdaSubscription(updateTableFn, {
+    filterPolicy: {
+      comment_type: sns.SubscriptionFilter.stringFilter({
+        allowlist: ['Caption']
+      })
+    }
+  }))
 
 
   // Permissions
@@ -168,11 +191,16 @@ imagesBucket.addEventNotification(
 
   imagesTable.grantReadWriteData(processImageFn)
   imagesTable.grantReadWriteData(deleteImageFn)
+  imagesTable.grantReadWriteData(updateTableFn)
 
     // Output
     
     new cdk.CfnOutput(this, "bucketName", {
       value: imagesBucket.bucketName,
+    });
+
+    new cdk.CfnOutput(this, "topicARN", {
+      value: updateImageTopic.topicArn,
     });
   }
 }
