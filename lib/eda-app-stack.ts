@@ -36,6 +36,8 @@ export class EDAAppStack extends cdk.Stack {
       receiveMessageWaitTime: cdk.Duration.seconds(10),
     });
 
+    newImageTopic.addSubscription(new subs.SqsSubscription(mailerQ));
+
   // Lambda functions
 
   const processImageFn = new lambdanode.NodejsFunction(
@@ -62,7 +64,7 @@ export class EDAAppStack extends cdk.Stack {
   new s3n.SnsDestination(newImageTopic)  // Changed
 );
 
-newImageTopic.addSubscription(new subs.SqsSubscription(mailerQ));
+  newImageTopic.addSubscription(new subs.SqsSubscription(imageProcessQueue));
 
  // SQS --> Lambda
   const newImageEventSource = new events.SqsEventSource(imageProcessQueue, {
