@@ -61,6 +61,13 @@ export class EDAAppStack extends cdk.Stack {
     entry: `${__dirname}/../lambdas/mailer.ts`,
   });
 
+  const rejectionMailerFn = new lambdanode.NodejsFunction(this, "rejection-mailer-function", {
+    runtime: lambda.Runtime.NODEJS_16_X,
+    memorySize: 1024,
+    timeout: cdk.Duration.seconds(3),
+    entry: `${__dirname}/../lambdas/rejectionMailer.ts`,
+  });
+
  // S3 --> SQS
  imagesBucket.addEventNotification(
   s3.EventType.OBJECT_CREATED,
@@ -75,9 +82,17 @@ export class EDAAppStack extends cdk.Stack {
     maxBatchingWindow: cdk.Duration.seconds(10),
   });
 
+  const failedImageEventSource = new events.SqsEventSource(badImagesQueue, {
+    batchSize: 5,
+    maxBatchingWindow: cdk.Duration.seconds(10),
+  })
+
+
   
 
   processImageFn.addEventSource(newImageEventSource);
+  rejectionMailerFn.addEventSource(failedImageEventSource);
+
 
   // a direct subscriber to the topic
   newImageTopic.addSubscription(new subs.LambdaSubscription(mailerFn))
@@ -88,6 +103,18 @@ export class EDAAppStack extends cdk.Stack {
   imagesBucket.grantRead(processImageFn);
 
   mailerFn.addToRolePolicy(
+    new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        "ses:SendEmail",
+        "ses:SendRawEmail",
+        "ses:SendTemplatedEmail",
+      ],
+      resources: ["*"],
+    })
+  );
+
+  rejectionMailerFn.addToRolePolicy(
     new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: [
