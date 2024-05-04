@@ -22,10 +22,17 @@ export class EDAAppStack extends cdk.Stack {
       publicReadAccess: false,
     });
 
-    // Integration infrastructure
+    // Queues
+    const badImagesQueue = new sqs.Queue(this, "bad-img-queue", {
+      retentionPeriod: cdk.Duration.minutes(30)
+    })
 
     const imageProcessQueue = new sqs.Queue(this, "img-created-queue", {
       receiveMessageWaitTime: cdk.Duration.seconds(10),
+      deadLetterQueue:{
+        queue: badImagesQueue,
+        maxReceiveCount: 2
+      }
     });
 
     const newImageTopic = new sns.Topic(this, "NewImageTopic", {
